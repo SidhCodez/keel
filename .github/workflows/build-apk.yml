@@ -17,11 +17,11 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Set up Java 17
+      - name: Set up Java 21 (Required for AGP 9.x)
         uses: actions/setup-java@v4
         with:
           distribution: 'zulu'
-          java-version: '17'
+          java-version: '21'
 
       - name: Set up Node.js 22
         uses: actions/setup-node@v4
@@ -44,11 +44,18 @@ jobs:
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease -Pandroid.enableMinifyInReleaseBuilds=false --no-daemon --stacktrace || ./gradlew assembleDebug --no-daemon --stacktrace
+          ./gradlew assembleRelease -Pandroid.enableMinifyInReleaseBuilds=false -Dorg.gradle.jvmargs="-Xmx4096m -XX:MaxMetaspaceSize=1024m" --no-daemon --stacktrace 2>&1 | tee ../gradle.log || {
+            echo "=== RELEASE BUILD FAILED, TRYING DEBUG BUILD ==="
+            ./gradlew assembleDebug -Dorg.gradle.jvmargs="-Xmx4096m -XX:MaxMetaspaceSize=1024m" --no-daemon --stacktrace 2>&1 | tee -a ../gradle.log || {
+              echo "=== GRADLE LOG (LAST 150 LINES) ==="
+              tail -n 150 ../gradle.log
+              exit 1
+            }
+          }
 
       - name: Locate Generated APKs
         run: |
-          echo "=== Generated APK Files ==="
+          echo "=== Found APKs ==="
           find android/ -name "*.apk" -ls
 
       - name: Upload APK Artifact

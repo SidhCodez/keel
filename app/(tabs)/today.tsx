@@ -5,6 +5,7 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import { Play, Pause, Plus, CheckCircle2, Clock, Bookmark, AlertTriangle } from 'lucide-react-native';
 import { colors } from '@/styles/colors';
 import { projectRepository, ProjectWithMetrics } from '@/db/repositories/projectRepository';
+import { habitRepository, HabitWithStatus } from '@/db/repositories/habitRepository';
 import { Project } from '@/db/schema';
 import { useTimerStore } from '@/stores/timerStore';
 import { ProjectFormModal } from '@/components/work/ProjectFormModal';
@@ -14,6 +15,7 @@ export default function TodayScreen() {
   const router = useRouter();
   const [continueTarget, setContinueTarget] = useState<Project | null>(null);
   const [todayWork, setTodayWork] = useState<ProjectWithMetrics[]>([]);
+  const [pendingHabits, setPendingHabits] = useState<HabitWithStatus[]>([]);
   const [isQuickCaptureOpen, setIsQuickCaptureOpen] = useState(false);
 
   const {
@@ -34,6 +36,9 @@ export default function TodayScreen() {
 
       const grouped = await projectRepository.getGroupedByBucket();
       setTodayWork(grouped.today);
+
+      const allHabits = await habitRepository.getAllWithStatus();
+      setPendingHabits(allHabits.filter((h) => !h.isCompletedToday));
     } catch (err) {
       console.error('[TodayScreen] Load failed:', err);
     }
@@ -194,35 +199,44 @@ export default function TodayScreen() {
         <View className="mt-6">
           <View className="flex-row items-center justify-between mb-2.5">
             <Text className="text-base font-bold text-textPrimary">
-              Habits Pending Today
+              Habits Pending Today ({pendingHabits.length})
             </Text>
-            <Text className="text-xs text-textSecondary">3 remaining</Text>
           </View>
 
-          <View className="space-y-2">
-            {[
-              { id: '1', title: 'Morning Hydration (1L)', streak: 12 },
-              { id: '2', title: 'Gym - Strength Training', streak: 4 },
-              { id: '3', title: 'System Architecture Reading', streak: 7 },
-            ].map((habit) => (
-              <View
-                key={habit.id}
-                className="flex-row items-center justify-between p-3.5 mb-2 rounded-xl bg-bgCard border border-borderSubtle"
-              >
-                <View className="flex-row items-center flex-1">
-                  <TouchableOpacity className="w-6 h-6 rounded-md border-2 border-borderSubtle mr-3 items-center justify-center" />
-                  <Text className="text-sm font-medium text-textPrimary">
-                    {habit.title}
-                  </Text>
+          {pendingHabits.length === 0 ? (
+            <View className="p-4 rounded-xl bg-bgCard border border-borderSubtle items-center">
+              <Text className="text-xs text-brandSuccess font-semibold">
+                ✓ All scheduled habits completed today!
+              </Text>
+            </View>
+          ) : (
+            <View className="space-y-2">
+              {pendingHabits.map((habit) => (
+                <View
+                  key={habit.id}
+                  className="flex-row items-center justify-between p-3.5 mb-2 rounded-xl bg-bgCard border border-borderSubtle"
+                >
+                  <View className="flex-row items-center flex-1 mr-2">
+                    <TouchableOpacity
+                      onPress={async () => {
+                        await habitRepository.toggleToday(habit.id);
+                        await loadDashboard();
+                      }}
+                      className="w-6 h-6 rounded-md border-2 border-borderSubtle mr-3 items-center justify-center bg-bgSubtle active:opacity-80"
+                    />
+                    <Text className="text-sm font-medium text-textPrimary">
+                      {habit.name}
+                    </Text>
+                  </View>
+                  <View className="px-2 py-0.5 rounded-full bg-amber-950/40 border border-brandWarning/30">
+                    <Text className="text-[11px] font-semibold text-brandWarning">
+                      🔥 {habit.currentStreak}d
+                    </Text>
+                  </View>
                 </View>
-                <View className="px-2 py-0.5 rounded-full bg-amber-950/40 border border-brandWarning/30">
-                  <Text className="text-[11px] font-semibold text-brandWarning">
-                    🔥 {habit.streak}d
-                  </Text>
-                </View>
-              </View>
-            ))}
-          </View>
+              ))}
+            </View>
+          )}
         </View>
 
         {/* Work Pending Today Section */}

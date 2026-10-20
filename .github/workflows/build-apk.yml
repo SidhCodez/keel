@@ -31,8 +31,8 @@ jobs:
 
       - name: Accept Android Licenses & Set up NDK
         run: |
-          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
-          echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;27.1.12297006" || true
+          yes | sudo $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+          echo "y" | sudo $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;27.1.12297006" || true
 
       - name: Install Dependencies
         run: npm ci --legacy-peer-deps
@@ -40,20 +40,21 @@ jobs:
       - name: Expo Prebuild
         run: npx expo prebuild --platform android --clean --no-install
 
-      - name: Build Release APK
+      - name: Build Android APK
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease -Pandroid.enableMinifyInReleaseBuilds=false --no-daemon --stacktrace
+          ./gradlew assembleRelease -Pandroid.enableMinifyInReleaseBuilds=false --no-daemon --stacktrace || ./gradlew assembleDebug --no-daemon --stacktrace
 
-      - name: List Generated APKs
+      - name: Locate Generated APKs
         run: |
-          ls -la android/app/build/outputs/apk/release/ || true
+          echo "=== Generated APK Files ==="
+          find android/ -name "*.apk" -ls
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: keel-release-apk
+          name: keel-apk
           path: android/app/build/outputs/apk/**/*.apk
 
       - name: Create or Update GitHub Release

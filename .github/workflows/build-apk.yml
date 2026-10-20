@@ -40,6 +40,18 @@ jobs:
       - name: Expo Prebuild
         run: npx expo prebuild --platform android --clean --no-install
 
+      - name: Patch settings.gradle for react-native-worklets
+        run: |
+          # react-native-worklets has no android entry in react-native.config.js
+          # so autolinking skips it, but reanimated's build.gradle.kts requires it
+          # as a Gradle subproject. We manually include it here.
+          WORKLETS_DIR="$(node --print "require.resolve('react-native-worklets/package.json').replace('/package.json','')")/android"
+          echo "" >> android/settings.gradle
+          echo "// Manual include for react-native-worklets (required by reanimated v4)" >> android/settings.gradle
+          echo "include ':react-native-worklets'" >> android/settings.gradle
+          echo "project(':react-native-worklets').projectDir = new File('${WORKLETS_DIR}')" >> android/settings.gradle
+          echo "=== Patched settings.gradle tail ===" && tail -6 android/settings.gradle
+
       - name: Build Release APK
         id: build_release
         continue-on-error: true
@@ -47,7 +59,10 @@ jobs:
           export NODE_BINARY=$(which node)
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease -Pandroid.enableMinifyInReleaseBuilds=false -Dorg.gradle.jvmargs="-Xmx4096m -XX:MaxMetaspaceSize=1024m" --no-daemon --stacktrace 2>&1 | tee ../gradle_release.log
+          ./gradlew assembleRelease \
+            -Pandroid.enableMinifyInReleaseBuilds=false \
+            -Dorg.gradle.jvmargs="-Xmx4096m -XX:MaxMetaspaceSize=1024m" \
+            --no-daemon --stacktrace 2>&1 | tee ../gradle_release.log
           test ${PIPESTATUS[0]} -eq 0
 
       - name: Build Debug APK Fallback
@@ -55,11 +70,14 @@ jobs:
         id: build_debug
         continue-on-error: true
         run: |
-          echo "=== Release build failed, compiling Debug APK fallback ==="
+          echo "=== Release build failed, trying Debug APK ==="
           export NODE_BINARY=$(which node)
           cd android
           chmod +x gradlew
-          ./gradlew assembleDebug -Pandroid.enableMinifyInReleaseBuilds=false -Dorg.gradle.jvmargs="-Xmx4096m -XX:MaxMetaspaceSize=1024m" --no-daemon --stacktrace 2>&1 | tee ../gradle_debug.log
+          ./gradlew assembleDebug \
+            -Pandroid.enableMinifyInReleaseBuilds=false \
+            -Dorg.gradle.jvmargs="-Xmx4096m -XX:MaxMetaspaceSize=1024m" \
+            --no-daemon --stacktrace 2>&1 | tee ../gradle_debug.log
           test ${PIPESTATUS[0]} -eq 0
 
       - name: Locate Generated APKs
@@ -71,12 +89,12 @@ jobs:
         if: always()
         run: |
           if [ -f gradle_release.log ]; then
-            echo "=== LAST 150 LINES OF RELEASE LOG ==="
-            tail -n 150 gradle_release.log
+            echo "=== LAST 200 LINES OF RELEASE LOG ==="
+            tail -n 200 gradle_release.log
           fi
           if [ -f gradle_debug.log ]; then
-            echo "=== LAST 150 LINES OF DEBUG LOG ==="
-            tail -n 150 gradle_debug.log
+            echo "=== LAST 200 LINES OF DEBUG LOG ==="
+            tail -n 200 gradle_debug.log
           fi
 
       - name: Upload APK Artifact
@@ -89,8 +107,20 @@ jobs:
             gradle_release.log
             gradle_debug.log
 
+      - name: Upload Logs to Release (on failure)
+        if: failure()
+        uses: softprops/action-gh-release@v2
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          tag_name: v1.0.0
+          files: |
+            gradle_release.log
+            gradle_debug.log
+          draft: false
+          prerelease: false
+
       - name: Create or Update GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+        if: success()
         uses: softprops/action-gh-release@v2
         with:
           token: ${{ secrets.GITHUB_TOKEN }}

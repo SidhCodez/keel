@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, ScrollView, TouchableOpacity, Linking, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { Play, Pause, Plus, CheckCircle2, Clock, Bookmark, AlertTriangle } from 'lucide-react-native';
+import { Play, Pause, Plus, CheckCircle2, Clock, Bookmark, AlertTriangle, Settings } from 'lucide-react-native';
 import { colors } from '@/styles/colors';
 import { projectRepository, ProjectWithMetrics } from '@/db/repositories/projectRepository';
 import { habitRepository, HabitWithStatus } from '@/db/repositories/habitRepository';
@@ -10,6 +10,7 @@ import { Project } from '@/db/schema';
 import { useTimerStore } from '@/stores/timerStore';
 import { ProjectFormModal } from '@/components/work/ProjectFormModal';
 import { StoppedAtModal } from '@/components/work/StoppedAtModal';
+import { SettingsModal } from '@/components/settings/SettingsModal';
 
 export default function TodayScreen() {
   const router = useRouter();
@@ -17,6 +18,7 @@ export default function TodayScreen() {
   const [todayWork, setTodayWork] = useState<ProjectWithMetrics[]>([]);
   const [pendingHabits, setPendingHabits] = useState<HabitWithStatus[]>([]);
   const [isQuickCaptureOpen, setIsQuickCaptureOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
   const {
     activeProjectId,
@@ -107,13 +109,22 @@ export default function TodayScreen() {
               Keel
             </Text>
           </View>
-          <TouchableOpacity
-            onPress={() => setIsQuickCaptureOpen(true)}
-            className="w-10 h-10 rounded-full bg-bgCard border border-borderSubtle items-center justify-center active:bg-bgSubtle"
-            accessibilityLabel="Quick capture"
-          >
-            <Plus color={colors.brandPrimary} size={20} />
-          </TouchableOpacity>
+          <View className="flex-row items-center space-x-2">
+            <TouchableOpacity
+              onPress={() => setIsSettingsOpen(true)}
+              className="w-10 h-10 mr-2 rounded-full bg-bgCard border border-borderSubtle items-center justify-center active:bg-bgSubtle"
+              accessibilityLabel="Settings and backup"
+            >
+              <Settings color={colors.textSecondary} size={18} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              onPress={() => setIsQuickCaptureOpen(true)}
+              className="w-10 h-10 rounded-full bg-bgCard border border-borderSubtle items-center justify-center active:bg-bgSubtle"
+              accessibilityLabel="Quick capture"
+            >
+              <Plus color={colors.brandPrimary} size={20} />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Continue Hero Card (North Star Benchmark) */}
@@ -308,6 +319,12 @@ export default function TodayScreen() {
           }}
         />
       )}
+      {/* Settings & Backup Modal */}
+      <SettingsModal
+        visible={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        onDataRestored={loadDashboard}
+      />
     </SafeAreaView>
   );
 }

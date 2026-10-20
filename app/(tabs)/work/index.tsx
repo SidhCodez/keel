@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, RefreshControl } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, RefreshControl, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useFocusEffect } from 'expo-router';
-import { Plus, Clock, Calendar as CalendarIcon, Layers, Play, Pause, Bookmark, AlertTriangle } from 'lucide-react-native';
+import { Plus, Clock, Calendar as CalendarIcon, Layers, Play, Pause, Bookmark, AlertTriangle, Bell } from 'lucide-react-native';
 import { colors } from '@/styles/colors';
 import { projectRepository, ProjectWithMetrics } from '@/db/repositories/projectRepository';
 import { Bucket } from '@/rules/buckets';
@@ -95,6 +95,29 @@ export default function WorkScreen() {
     }
   };
 
+  const handleSnooze = (project: ProjectWithMetrics) => {
+    Alert.alert(
+      'Snooze Deadline (+1 Slip)',
+      `Snooze "${project.title}" for 30 minutes? An exact alarm will ring and +1 will be recorded to your slip count.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Snooze 30m',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await projectRepository.snooze(project.id, 30);
+              await loadProjects();
+              Alert.alert('Snooze Active', 'Alarm scheduled in 30 minutes. Slip recorded.');
+            } catch (err) {
+              console.error('Failed to snooze project:', err);
+            }
+          },
+        },
+      ]
+    );
+  };
+
   const renderProjectCard = (project: ProjectWithMetrics) => {
     const typeColor = getTypeColor(project.type);
     const isThisActive = activeProjectId === project.id;
@@ -148,11 +171,21 @@ export default function WorkScreen() {
           </View>
         ) : null}
 
-        {project.deadline ? (
-          <Text className="text-[11px] text-textMuted mt-2">
-            Deadline: {project.deadline}
+        <View className="flex-row items-center justify-between mt-3 pt-2.5 border-t border-borderSubtle/50">
+          <Text className="text-[11px] text-textMuted">
+            {project.deadline ? `Due: ${project.deadline}` : 'No deadline'}
           </Text>
-        ) : null}
+
+          <TouchableOpacity
+            onPress={() => handleSnooze(project)}
+            className="flex-row items-center px-2.5 py-1 rounded-lg bg-bgSubtle border border-borderSubtle active:opacity-70"
+          >
+            <Bell size={11} color={colors.textSecondary} />
+            <Text className="ml-1 text-[10px] font-semibold text-textSecondary">
+              Snooze (30m)
+            </Text>
+          </TouchableOpacity>
+        </View>
       </TouchableOpacity>
     );
   };

@@ -3,6 +3,7 @@ import { db } from '../client';
 import { projects, activeSessions, sessions, Project, NewProject } from '../schema';
 import { calculateBucket, Bucket } from '@/rules/buckets';
 import { calculateDailyTarget } from '@/rules/targets';
+import { scheduleDeadlineReminders, cancelDeadlineReminders, scheduleSnooze } from '@/services/notificationService';
 import * as Crypto from 'expo-crypto';
 import { parseISO, isAfter } from 'date-fns';
 
@@ -38,6 +39,16 @@ export const projectRepository = {
     await db.insert(projects).values(newProject);
     const created = await this.getById(id);
     if (!created) throw new Error('Failed to create project');
+
+    // Auto-schedule deadline reminders
+    if (created.deadline) {
+      scheduleDeadlineReminders({
+        projectId: created.id,
+        projectTitle: created.title,
+        deadline: created.deadline,
+      }).catch((err) => console.error('[ProjectRepo] Failed to schedule deadline reminders:', err));
+    }
+
     return created;
   },
 
@@ -65,11 +76,50 @@ export const projectRepository = {
     await db.update(projects).set(finalUpdates).where(eq(projects.id, id));
     const updated = await this.getById(id);
     if (!updated) throw new Error('Failed to update project');
+
+    if (updated.status === 'completed') {
+      cancelDeadlineReminders(id).catch((err) =>
+        console.error('[ProjectRepo] Failed to cancel deadline reminders on completion:', err)
+      );
+    } else if (updates.deadline !== undefined) {
+      if (updated.deadline) {
+        scheduleDeadlineReminders({
+          projectId: updated.id,
+          projectTitle: updated.title,
+          deadline: updated.deadline,
+        }).catch((err) =>
+          console.error('[ProjectRepo] Failed to reschedule deadline reminders:', err)
+        );
+      } else {
+        cancelDeadlineReminders(id).catch((err) =>
+          console.error('[ProjectRepo] Failed to cancel deadline reminders:', err)
+        );
+      }
+    }
+
     return updated;
   },
 
   async delete(id: string): Promise<void> {
+    cancelDeadlineReminders(id).catch((err) =>
+      console.error('[ProjectRepo] Failed to cancel deadline reminders on delete:', err)
+    );
     await db.delete(projects).where(eq(projects.id, id));
+  },
+
+  /**
+   * Smart snooze: Delays prompt by specified minutes and increments slip count by +1 (Rule 5)
+   */
+  async snooze(id: string, delayMinutes: number = 30): Promise<Project> {
+    const project = await this.getById(id);
+    if (!project) throw new Error(`Project ${id} not found`);
+
+    const updated = await this.update(id, {
+      slipCount: (project.slipCount ?? 0) + 1,
+    });
+
+    await scheduleSnooze(project.id, project.title, delayMinutes);
+    return updated;
   },
 
   async getGroupedByBucket(referenceDate: Date = new Date()): Promise<Record<Bucket, ProjectWithMetrics[]>> {

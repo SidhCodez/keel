@@ -1,5 +1,7 @@
 import { create } from 'zustand';
 import { sessionRepository } from '@/db/repositories/sessionRepository';
+import { projectRepository } from '@/db/repositories/projectRepository';
+import { scheduleForgotTimerAlert, cancelForgotTimerAlert } from '@/services/notificationService';
 
 const THREE_HOURS_MS = 3 * 60 * 60 * 1000; // 10,800,000 ms
 const FIFTEEN_MINUTES_MS = 15 * 60 * 1000;
@@ -44,6 +46,7 @@ export const useTimerStore = create<TimerState>((set, get) => ({
       // Forgot-Timer Guard check: if elapsed >= 3 hours + 15 min grace, auto-pause clamped to 3h
       if (totalElapsedMs >= THREE_HOURS_MS + FIFTEEN_MINUTES_MS) {
         console.warn('[TimerGuard] Session exceeded 3h15m while app was closed. Auto-pausing clamped to 3h.');
+        cancelForgotTimerAlert(active.projectId).catch(() => {});
         await sessionRepository.pause(active.projectId, undefined, true);
         set({ activeProjectId: null, startedAt: null, accumulatedMs: 0, elapsedSeconds: 0 });
         return;
@@ -67,6 +70,9 @@ export const useTimerStore = create<TimerState>((set, get) => ({
   start: async (projectId: string) => {
     try {
       const active = await sessionRepository.start(projectId);
+      const proj = await projectRepository.getById(projectId);
+      scheduleForgotTimerAlert(projectId, proj?.title ?? 'Active Session').catch(() => {});
+
       set({
         activeProjectId: projectId,
         startedAt: active.startedAt,
@@ -97,6 +103,7 @@ export const useTimerStore = create<TimerState>((set, get) => ({
     if (!pausedProjectId) return;
 
     try {
+      cancelForgotTimerAlert(pausedProjectId).catch(() => {});
       await sessionRepository.pause(pausedProjectId, marker.trim());
       set({
         activeProjectId: null,
@@ -118,6 +125,9 @@ export const useTimerStore = create<TimerState>((set, get) => ({
 
     if (continueWorking) {
       // User tapped "Still Working": push threshold forward by resetting startedAt
+      const proj = await projectRepository.getById(activeProjectId);
+      scheduleForgotTimerAlert(activeProjectId, proj?.title ?? 'Active Session').catch(() => {});
+
       set({
         isGuardAlertVisible: false,
         startedAt: Date.now(),

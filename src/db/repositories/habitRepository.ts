@@ -2,6 +2,7 @@ import { eq, and, desc, sql } from 'drizzle-orm';
 import { db } from '../client';
 import { habits, habitLogs, habitFreezes, Habit, NewHabit, HabitLog } from '../schema';
 import { computeHabitStreak, StreakResult } from '@/rules/streaks';
+import { scheduleHabitReminders, cancelHabitReminders } from '@/services/notificationService';
 import * as Crypto from 'expo-crypto';
 import { format, getISODay, parseISO } from 'date-fns';
 
@@ -44,6 +45,31 @@ export const habitRepository = {
     await db.insert(habits).values(newHabit);
     const created = await this.getById(id);
     if (!created) throw new Error('Failed to create habit');
+
+    // Auto-schedule reminders if reminderTime is set
+    if (created.reminderTime) {
+      let repeatDays: number[];
+      if (created.repeatType === 'daily') {
+        repeatDays = [1, 2, 3, 4, 5, 6, 7];
+      } else if (created.repeatType === 'weekdays') {
+        repeatDays = [1, 2, 3, 4, 5];
+      } else {
+        try {
+          repeatDays = created.repeatDays ? JSON.parse(created.repeatDays) : [1, 2, 3, 4, 5, 6, 7];
+        } catch {
+          repeatDays = [1, 2, 3, 4, 5, 6, 7];
+        }
+      }
+
+      scheduleHabitReminders({
+        habitId: created.id,
+        habitName: created.name,
+        reminderTime: created.reminderTime,
+        reminderType: created.reminderType as 'nudge' | 'alarm' | 'escalate',
+        repeatDays,
+      }).catch((err) => console.error('[HabitRepo] Failed to schedule reminders:', err));
+    }
+
     return created;
   },
 
@@ -60,6 +86,10 @@ export const habitRepository = {
   },
 
   async delete(id: string): Promise<void> {
+    // Cancel any scheduled reminders before deleting
+    cancelHabitReminders(id).catch((err) =>
+      console.error('[HabitRepo] Failed to cancel reminders:', err)
+    );
     await db.delete(habits).where(eq(habits.id, id));
   },
 

@@ -29,23 +29,32 @@ jobs:
           node-version: 22
           cache: 'npm'
 
+      - name: Accept Android Licenses & Set up NDK
+        run: |
+          yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+          echo "y" | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;27.1.12297006" || true
+
       - name: Install Dependencies
         run: npm ci --legacy-peer-deps
 
       - name: Expo Prebuild
-        run: npx expo prebuild --platform android --clean
+        run: npx expo prebuild --platform android --clean --no-install
 
       - name: Build Release APK
         run: |
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease --no-daemon
+          ./gradlew assembleRelease -Pandroid.enableMinifyInReleaseBuilds=false --no-daemon --stacktrace
+
+      - name: List Generated APKs
+        run: |
+          ls -la android/app/build/outputs/apk/release/ || true
 
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: keel-release-apk
-          path: android/app/build/outputs/apk/release/app-release.apk
+          path: android/app/build/outputs/apk/**/*.apk
 
       - name: Create or Update GitHub Release
         if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
@@ -54,7 +63,7 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'v1.0.0' }}
           name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'Keel v1.0.0 (Latest Release)' }}
-          files: android/app/build/outputs/apk/release/app-release.apk
+          files: android/app/build/outputs/apk/**/*.apk
           generate_release_notes: true
           draft: false
           prerelease: false

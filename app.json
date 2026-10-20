@@ -27,7 +27,7 @@
     "android": {
       "package": "com.keel.app",
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundColor": "#000000"
       },
       "permissions": [
@@ -48,7 +48,6 @@
       "expo-sqlite",
       "expo-sharing",
       "expo-updates",
-      "expo-keep-awake",
       [
         "expo-notifications",
         {

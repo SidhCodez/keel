@@ -6,10 +6,12 @@ node_modules/
 # Testing
 coverage/
 
-# Expo
+# Expo / Native
 .expo/
 dist/
 web-build/
+android/
+ios/
 
 # Native
 *.orig.*

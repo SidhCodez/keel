@@ -28,7 +28,18 @@
 
 ---
 
-## 🎯 The Problem
+## 📥 Download & Run Immediately (GitHub Release Package)
+
+You can download the pre-built, production Android APK directly from GitHub Releases:
+
+[![Download Latest APK](https://img.shields.io/badge/Download-Latest_Release_APK-38BDF8?style=for-the-badge&logo=android)](../../releases/latest)
+
+1. **Download**: Go to [**GitHub Releases**](../../releases/latest) and download `app-release.apk`.
+2. **Install**: Tap `app-release.apk` on your Android device (enable *"Install unknown apps"* if prompted).
+3. **Run**: Keel starts instantly with local SQLite database initialized — no login, no cloud, no setup.
+4. **Seamless Auto-Updates**: When new updates are pushed, Keel automatically checks for updates via `expo-updates` on app start and applies them seamlessly without reinstalling!
+
+---
 
 Self-directed learners juggle **three disconnected tools** daily:
 

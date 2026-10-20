@@ -29,7 +29,7 @@ jobs:
           node-version: 22
           cache: 'npm'
 
-      - name: Accept Android Licenses & Install NDK 27
+      - name: Accept Android Licenses & Set up NDK
         run: |
           yes | sudo $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
           echo "y" | sudo $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;27.1.12297006" || true
@@ -40,39 +40,54 @@ jobs:
       - name: Expo Prebuild
         run: npx expo prebuild --platform android --clean --no-install
 
-      - name: Configure Android SDK and NDK Paths
-        run: |
-          echo "sdk.dir=$ANDROID_HOME" > android/local.properties
-          if [ -d "$ANDROID_HOME/ndk/27.1.12297006" ]; then
-            echo "ndk.dir=$ANDROID_HOME/ndk/27.1.12297006" >> android/local.properties
-          fi
-          cat android/local.properties
-
       - name: Build Release APK
+        id: build_release
+        continue-on-error: true
         run: |
           export NODE_BINARY=$(which node)
           cd android
           chmod +x gradlew
-          ./gradlew assembleRelease -Pandroid.enableMinifyInReleaseBuilds=false -Dorg.gradle.jvmargs="-Xmx4096m -XX:MaxMetaspaceSize=1024m" --no-daemon --stacktrace
+          ./gradlew assembleRelease -Pandroid.enableMinifyInReleaseBuilds=false -Dorg.gradle.jvmargs="-Xmx4096m -XX:MaxMetaspaceSize=1024m" --no-daemon --stacktrace 2>&1 | tee ../gradle_release.log
+          test ${PIPESTATUS[0]} -eq 0
 
       - name: Build Debug APK Fallback
-        if: failure()
+        if: steps.build_release.outcome == 'failure'
+        id: build_debug
+        continue-on-error: true
         run: |
           echo "=== Release build failed, compiling Debug APK fallback ==="
           export NODE_BINARY=$(which node)
           cd android
-          ./gradlew assembleDebug -Pandroid.enableMinifyInReleaseBuilds=false -Dorg.gradle.jvmargs="-Xmx4096m -XX:MaxMetaspaceSize=1024m" --no-daemon --stacktrace
+          chmod +x gradlew
+          ./gradlew assembleDebug -Pandroid.enableMinifyInReleaseBuilds=false -Dorg.gradle.jvmargs="-Xmx4096m -XX:MaxMetaspaceSize=1024m" --no-daemon --stacktrace 2>&1 | tee ../gradle_debug.log
+          test ${PIPESTATUS[0]} -eq 0
 
       - name: Locate Generated APKs
         run: |
           echo "=== Found APK Files ==="
-          find android/app/build/outputs/apk/ -name "*.apk" -ls
+          find android/ -name "*.apk" -ls || true
+
+      - name: Dump Logs on Failure
+        if: always()
+        run: |
+          if [ -f gradle_release.log ]; then
+            echo "=== LAST 150 LINES OF RELEASE LOG ==="
+            tail -n 150 gradle_release.log
+          fi
+          if [ -f gradle_debug.log ]; then
+            echo "=== LAST 150 LINES OF DEBUG LOG ==="
+            tail -n 150 gradle_debug.log
+          fi
 
       - name: Upload APK Artifact
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: keel-apk
-          path: android/app/build/outputs/apk/**/*.apk
+          path: |
+            android/app/build/outputs/apk/**/*.apk
+            gradle_release.log
+            gradle_debug.log
 
       - name: Create or Update GitHub Release
         if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
@@ -81,7 +96,10 @@ jobs:
           token: ${{ secrets.GITHUB_TOKEN }}
           tag_name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'v1.0.0' }}
           name: ${{ startsWith(github.ref, 'refs/tags/v') && github.ref_name || 'Keel v1.0.0 (Latest Release)' }}
-          files: android/app/build/outputs/apk/**/*.apk
+          files: |
+            android/app/build/outputs/apk/**/*.apk
+            gradle_release.log
+            gradle_debug.log
           generate_release_notes: true
           draft: false
           prerelease: false
